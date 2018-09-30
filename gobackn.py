@@ -16,6 +16,11 @@ def add_zeroes(string, size):
     zeroes = '0' * (size-len(string))
     return zeroes + string
 
+def get_lowest_ack(next_frame, ack):
+    while next_frame%7 != ack:
+        next_frame -= 1
+    return next_frame
+
 def from_network_layer():
     # Randomly generate data. Done.
     repeat_string = random.randint(0, 65535)
@@ -91,7 +96,7 @@ def gobackn(socket, start_first, loss):
                 # Received timeout, re-send data
                 if data_sent:
                     print ('Time Up!')
-                    next_frame_to_send = ack_expected
+                    next_frame_to_send = get_lowest_ack(next_frame_to_send-1, ack_expected)
                     for i in range(nbuffered):
                         send_data(next_frame_to_send, frame_expected, buffer)
                         next_frame_to_send = next_frame_to_send + 1
