@@ -1,7 +1,13 @@
-MAX_SEQ = 7
+import threading
+
 global SOCKET
 global ADDR
+MAX_SEQ = 7
 NETWORK_LAYER_READY = True
+
+def add_zeroes(string, size):
+    zeroes = '0' * (size-len(string))
+    return zeroes + string
 
 def from_network_layer():
     # Todo -> Randomly generate data
@@ -21,25 +27,26 @@ def between(a, b, c):
     return False
 
 def parse_message(msg):
-    # Todo -> Parse the message and return a dictionary of seq_num, info and ack
+    # Parse the message and return a dictionary of seq_num, info and ack. Done.
     r = {}
-    r['seq'] = 0
-    r['info'] = '0000000'
-    r['ack'] = 0
+    r['seq'] = int(msg[0:32], 2)
+    r['info'] = msg[256:-32]
+    r['ack'] = int(msg[32:64], 2)
     return r
 
 def send_data(frame_nr, frame_expected, buffer):
     global ADDR
-    s = {}
-    s['info'] = buffer[frame_nr]
-    s['seq'] = frame_nr
-    s['ack'] = (frame_expected + MAX_SEQ) % (MAX_SEQ + 1)
-    # Todo -> Construct the string to be sent
-    msg = '0010001'
+    sinfo = buffer[frame_nr]
+    sseq = "{0:b}".format(frame_nr)
+    sack = "{0:b}".format((frame_expected + MAX_SEQ) % (MAX_SEQ + 1))
+    # Construct the string to be sent. Done.
+    # Todo -> Add check sum error check
+    msg = add_zeroes(sseq, 32) + add_zeroes(sack, 32) + add_zeroes('', 196) + sinfo
     SOCKET.sendto(msg, ADDR)
     # Start the timer thread
 
 def gobackn(socket):
+    global MAX_SEQ
     global SOCKET
     global ADDR
     global NETWORK_LAYER_READY
@@ -81,9 +88,3 @@ def gobackn(socket):
             NETWORK_LAYER_READY = True
         else:
             NETWORK_LAYER_READY = False
-
-def main():
-    pass
-
-if __name__ == '__main__':
-    main()
