@@ -1,5 +1,6 @@
 import socket
 import sys
+import gobackn
 
 HOST = str(sys.argv[1])     # Standard loopback interface address (localhost)
 PORT = int(sys.argv[2])     # Port to listen on (non-privileged ports are > 1023)
@@ -12,11 +13,12 @@ def main():
         conn, addr = s.accept()
         with conn:
             print('Connected by', addr)
-            while True:
-                data = conn.recv(1024)
-                if not data:
-                    break
-                conn.sendall(data)    
+            data = conn.recv(1024)
+            conn.sendall(data)
+
+            print('Starting go back n')
+            gobackn.gobackn(conn, True)
+            print('Go back n completed')
 
 if __name__ == '__main__':
     main()

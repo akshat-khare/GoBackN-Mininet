@@ -14,12 +14,13 @@ def from_network_layer():
     # Randomly generate data. Done.
     repeat_string = random.randint(0, 65535)
     times = random.randint(16, 110)
-    data = add_zeroes(repeat_string, 16) * times
+    data = add_zeroes(bin(repeat_string)[2:], 16) * times
     return data
 
 def to_network_layer(msg):
     # Todo -> Write this message onto a file
-    print ('Received message: {0}', msg)
+    print ('--------------------------------')
+    print ('Received message: {0}\n'.format(msg))
 
 def between(a, b, c):
     abc = a<=b and b<c
@@ -45,10 +46,12 @@ def send_data(frame_nr, frame_expected, buffer):
     # Construct the string to be sent. Done.
     # Todo -> Add check sum error check
     msg = add_zeroes(sseq, 32) + add_zeroes(sack, 32) + add_zeroes('', 196) + sinfo
-    SOCKET.sendto(msg, ADDR)
+    SOCKET.sendall(msg.encode('utf-8'))
+    print ('--------------------------------')
+    print ('Sent the message: {0}\n'.format(msg))
     # Start the timer thread
 
-def gobackn(socket):
+def gobackn(socket, start_first):
     global MAX_SEQ
     global SOCKET
     global ADDR
@@ -63,16 +66,25 @@ def gobackn(socket):
     nbuffered = 0
 
     while True:
-        msg, ADDR = SOCKET.recv(2048)
+        frame_arrival = False
+        if not start_first:
+            print ('Waiting for data on socket with details:')
+            print ('frame: {0}\tack: {1}\tbuffer: {2}'.format(frame_expected, ack_expected, nbuffered))
+            msg = SOCKET.recv(2048)
+            frame_arrival = True
+        else:
+            start_first = False
+            
         if NETWORK_LAYER_READY:
-            buffer[next_frame_to_send] = from_network_layer()
+            buffer.append(from_network_layer())
             nbuffered = nbuffered + 1
             send_data(next_frame_to_send, frame_expected, buffer)
             next_frame_to_send = next_frame_to_send + 1
 
-        if msg is 'Frame Arrival':
+        if frame_arrival:
             r = parse_message(msg)
             if r['seq'] is frame_expected:
+                print ('Received expected frame')
                 to_network_layer(r['info'])
                 frame_expected = frame_expected + 1
             while between(ack_expected, r['ack'], next_frame_to_send):
