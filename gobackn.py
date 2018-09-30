@@ -3,7 +3,7 @@ import random
 
 global SOCKET
 global ADDR
-MAX_SEQ = 2
+MAX_SEQ = 4
 NETWORK_LAYER_READY = True
 
 def add_zeroes(string, size):
@@ -19,7 +19,6 @@ def from_network_layer():
 
 def to_network_layer(msg):
     # Todo -> Write this message onto a file
-    print ('--------------------------------')
     print ('Received message.')
 
 def between(a, b, c):
@@ -33,7 +32,7 @@ def between(a, b, c):
 def parse_message(msg):
     # Parse the message and return a dictionary of seq_num, info and ack. Done.
     r = {}
-    r['seq'] = int(msg[0:32], 2)
+    r['seq'] = int(msg[0:32], 2) % MAX_SEQ
     r['ack'] = int(msg[32:64], 2)
     r['info'] = msg[256:-32]
     return r
@@ -43,7 +42,8 @@ def send_data(frame_nr, frame_expected, buffer):
     sinfo = buffer[frame_nr]
     sseq = "{0:b}".format(frame_nr)
     # Ack of the received frame
-    ack = (frame_expected + MAX_SEQ) % (MAX_SEQ + 1)
+    ack = (frame_expected + MAX_SEQ - 1) % MAX_SEQ
+    print ('frame_expected:{0} ack:{1}'.format(frame_expected, ack))
     sack = "{0:b}".format(ack)
     # Construct the string to be sent. Done.
     # Todo -> Add check sum error check
@@ -82,11 +82,13 @@ def gobackn(socket, start_first):
             if r['seq'] is frame_expected:
                 print ('Received expected frame, with ack: {0}'.format(r['ack']))
                 to_network_layer(r['info'])
-                frame_expected = frame_expected + 1
-            while between(ack_expected, r['ack'], next_frame_to_send):
+                frame_expected = (frame_expected + 1) % MAX_SEQ
+
+            print ("{0}\t{1}\t{2}".format(ack_expected, r['ack'], next_frame_to_send))
+            if between(ack_expected, r['ack'], next_frame_to_send):
                 nbuffered = nbuffered - 1
                 # Todo -> Stop the timer thread
-                ack_expected = ack_expected + 1
+                ack_expected = (ack_expected + 1) % MAX_SEQ
             
         if NETWORK_LAYER_READY:
             buffer.append(from_network_layer())
