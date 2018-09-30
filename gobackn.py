@@ -3,7 +3,7 @@ import random
 
 global SOCKET
 global ADDR
-MAX_SEQ = 4
+MAX_SEQ = 7
 NETWORK_LAYER_READY = True
 
 def add_zeroes(string, size):
@@ -43,7 +43,6 @@ def send_data(frame_nr, frame_expected, buffer):
     sseq = "{0:b}".format(frame_nr)
     # Ack of the received frame
     ack = (frame_expected + MAX_SEQ - 1) % MAX_SEQ
-    print ('frame_expected:{0} ack:{1}'.format(frame_expected, ack))
     sack = "{0:b}".format(ack)
     # Construct the string to be sent. Done.
     # Todo -> Add check sum error check
@@ -71,7 +70,7 @@ def gobackn(socket, start_first):
         frame_arrival = False
         if not start_first:
             print ('Waiting for data on socket with details:')
-            print ('frame: {0}\tack: {1}\tbuffer: {2}'.format(frame_expected, ack_expected, nbuffered))
+            # print ('frame: {0}\tack: {1}\tbuffer: {2}'.format(frame_expected, ack_expected, nbuffered))
             msg = SOCKET.recv(2048)
             frame_arrival = True
         else:
@@ -84,7 +83,6 @@ def gobackn(socket, start_first):
                 to_network_layer(r['info'])
                 frame_expected = (frame_expected + 1) % MAX_SEQ
 
-            print ("{0}\t{1}\t{2}".format(ack_expected, r['ack'], next_frame_to_send))
             if between(ack_expected, r['ack'], next_frame_to_send):
                 nbuffered = nbuffered - 1
                 # Todo -> Stop the timer thread
