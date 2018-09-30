@@ -17,7 +17,7 @@ def main():
             conn.sendall(data)
 
             print('Starting go back n')
-            gobackn.gobackn(conn, True)
+            gobackn.gobackn(conn, True, LOSS)
             print('Go back n completed')
 
 if __name__ == '__main__':
