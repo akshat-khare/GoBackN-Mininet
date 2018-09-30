@@ -3,7 +3,7 @@ import random
 
 global SOCKET
 global ADDR
-MAX_SEQ = 7
+MAX_SEQ = 2
 NETWORK_LAYER_READY = True
 
 def add_zeroes(string, size):
