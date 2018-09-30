@@ -1,4 +1,5 @@
 import threading
+import random
 
 global SOCKET
 global ADDR
@@ -10,8 +11,10 @@ def add_zeroes(string, size):
     return zeroes + string
 
 def from_network_layer():
-    # Todo -> Randomly generate data
-    data = '0001000'
+    # Randomly generate data. Done.
+    repeat_string = random.randint(0, 65535)
+    times = random.randint(16, 110)
+    data = add_zeroes(repeat_string, 16) * times
     return data
 
 def to_network_layer(msg):
