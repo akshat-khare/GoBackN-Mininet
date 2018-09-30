@@ -3,11 +3,12 @@ import random
 import time
 
 global SOCKET
-global ADDR
 global LOSS
+global MAX_SEQ
 
+LOCK = threading.Lock()
 TIMEOUT = 2
-MAX_SEQ = 7
+SEND_QUEUE = []
 NETWORK_LAYER_READY = True
 
 current_milli_time = lambda: int(round(time.time() * 1000))
@@ -49,7 +50,6 @@ def between(a, b, c):
     return False
 
 def send_data(frame_nr, frame_expected, buffer):
-    global LOSS
     sinfo = buffer[frame_nr]
     sseq = "{0:b}".format(frame_nr)
     # Ack of the received frame
@@ -62,23 +62,59 @@ def send_data(frame_nr, frame_expected, buffer):
     print ('--------------------------------')
     print ('Sent the message with: frame:{0}\tack:{1}\n'.format(frame_nr, ack))
 
-def gobackn(socket, start_first, loss):
+
+next_frame_to_send = 0
+ack_expected = 0
+frame_expected = 0
+nbuffered = 0
+
+def recv_data():
+    global next_frame_to_send
+    global ack_expected
+    global frame_expected
+    global nbuffered
+
     global MAX_SEQ
     global SOCKET
     global LOSS
+
+    while True:
+        msg = SOCKET.recv(2048)
+        p = random.random()
+        if p > LOSS:
+            LOCK.acquire()
+            
+            r = parse_message(msg)
+            if r['seq'] is frame_expected:
+                print ('Received expected frame, with ack: {0}'.format(r['ack']))
+                to_network_layer(r['info'])
+                frame_expected = (frame_expected + 1) % MAX_SEQ
+            if between(ack_expected, r['ack'], next_frame_to_send):
+                nbuffered = nbuffered - 1
+                ack_expected = (ack_expected + 1) % MAX_SEQ
+            
+            LOCK.release()
+
+def gobackn(socket, max_seq, start_first, loss):
+    global next_frame_to_send
+    global ack_expected
+    global frame_expected
+    global nbuffered
+
     global NETWORK_LAYER_READY
+    global SOCKET
+    global LOSS
+    global MAX_SEQ
 
     LOSS = loss
+    MAX_SEQ = max_seq
     SOCKET = socket
     SOCKET.settimeout(TIMEOUT)
     buffer = []
 
-    next_frame_to_send = 0
-    ack_expected = 0
-    frame_expected = 0
-    nbuffered = 0
-
     data_sent = True
+    recv_thread = threading.Thread(target=recv_data)
+
     while True:
         frame_arrival = False
         if not start_first:
@@ -86,7 +122,6 @@ def gobackn(socket, start_first, loss):
             # Receive message with some probability
             p = random.random()
             try:
-                msg = SOCKET.recv(2048)
                 if p > LOSS:
                     frame_arrival = True
                 else:
@@ -100,17 +135,6 @@ def gobackn(socket, start_first, loss):
                     for i in range(nbuffered):
                         send_data(next_frame_to_send, frame_expected, buffer)
                         next_frame_to_send = next_frame_to_send + 1
-
-        if frame_arrival:
-            r = parse_message(msg)
-            if r['seq'] is frame_expected:
-                print ('Received expected frame, with ack: {0}'.format(r['ack']))
-                to_network_layer(r['info'])
-                frame_expected = (frame_expected + 1) % MAX_SEQ
-
-            if between(ack_expected, r['ack'], next_frame_to_send):
-                nbuffered = nbuffered - 1
-                ack_expected = (ack_expected + 1) % MAX_SEQ
             
         send_frame = start_first or frame_arrival
         if NETWORK_LAYER_READY and send_frame:
