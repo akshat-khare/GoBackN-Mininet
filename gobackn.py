@@ -129,21 +129,22 @@ def gobackn(socket, start_first, loss):
                 to_network_layer(r['info'])
                 frame_expected = (frame_expected + 1) % MAX_SEQ
             print ('{0}\t{1}\t{2}'.format(ack_expected, r['ack'], next_frame_to_send))
-            # send_queue.append((frame_expected, next_frame_to_send, nbuffered))
+            send_queue.append((frame_expected, next_frame_to_send, nbuffered))
             if between(ack_expected, r['ack'], next_frame_to_send):
                 print ('Received expected ack')
                 nbuffered = nbuffered - 1
                 ack_expected = (ack_expected + 1) % MAX_SEQ
             
         send_frame = sender or frame_arrival
-        print (NETWORK_LAYER_READY)
-        if NETWORK_LAYER_READY and send_frame:
+        # print (NETWORK_LAYER_READY)
+        if send_queue or (NETWORK_LAYER_READY and send_frame):
             print ('Sending frame: {0}'.format(next_frame_to_send))
             buffer.append(from_network_layer())
             nbuffered = nbuffered + 1
             send_data(next_frame_to_send, frame_expected, buffer)
             data_sent = True
             next_frame_to_send = next_frame_to_send + 1 
+            send_queue = send_queue[0:-1]
         
         if nbuffered < MAX_SEQ:
             NETWORK_LAYER_READY = True
