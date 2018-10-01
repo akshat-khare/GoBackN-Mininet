@@ -70,7 +70,7 @@ def send_data(frame_nr, frame_expected, buffer):
     SOCKET.sendall(msg.encode('utf-8'))
     print ('--------------------------------')
     # print ('Sent the message with: frame:{0}\tack:{1}\n'.format(frame_nr, ack))
-    print ('Sent message length: {0}'.format(len(sinfo)))
+    print ('Sent message frame: {0} and ack: {1}, length: {2}'.format(frame_nr, ack, len(sinfo)))
 
 def gobackn(socket, start_first, loss):
     global MAX_SEQ
@@ -83,6 +83,7 @@ def gobackn(socket, start_first, loss):
     SOCKET = socket
     SOCKET.settimeout(2)
     SOCKET.setblocking(0)
+    send_queue = []
     buffer = []
 
     next_frame_to_send = 0
@@ -127,12 +128,15 @@ def gobackn(socket, start_first, loss):
                 print ('Received expected frame, with ack: {0}'.format(r['ack']))
                 to_network_layer(r['info'])
                 frame_expected = (frame_expected + 1) % MAX_SEQ
-
+            print ('{0}\t{1}\t{2}'.format(ack_expected, r['ack'], next_frame_to_send))
+            # send_queue.append((frame_expected, next_frame_to_send, nbuffered))
             if between(ack_expected, r['ack'], next_frame_to_send):
+                print ('Received expected ack')
                 nbuffered = nbuffered - 1
                 ack_expected = (ack_expected + 1) % MAX_SEQ
             
         send_frame = sender or frame_arrival
+        print (NETWORK_LAYER_READY)
         if NETWORK_LAYER_READY and send_frame:
             print ('Sending frame: {0}'.format(next_frame_to_send))
             buffer.append(from_network_layer())
