@@ -4,12 +4,13 @@ import time
 import socket
 
 LOCK = threading.Lock()
-TIMEOUT = 2
+TIMEOUT = 2000
 TIMEUP = False
 ACK_READY = False
 NETWORK_LAYER_READY = True
 
 current_milli_time = lambda: int(round(time.time() * 1000))
+TIMER = current_milli_time()
 
 def add_zeroes(string, size):
     zeroes = '0' * (size-len(string))
@@ -82,6 +83,8 @@ def recv_data():
     global send_queue
 
     global ACK_READY
+    global TIMEUP
+    global TIMER
 
     while True:
         print ('R1: {0}'.format(nbuffered))
@@ -100,7 +103,7 @@ def recv_data():
                     ACK_READY = True
                     print ('Ack ready set to true')
 
-                print ('{0}\t{1}\t{2}'.format(ack_expected, r['ack'], next_frame_to_send))
+                print ('R: {0}\t{1}\t{2}'.format(ack_expected, r['ack'], next_frame_to_send))
                 if between(ack_expected, r['ack'], next_frame_to_send):
                     print ('Received expected ack')
                     nbuffered = nbuffered - 1
@@ -112,7 +115,7 @@ def recv_data():
                 print ('FRAME DROPPED')
         except socket.timeout:
             LOCK.acquire()
-            print ('Rpasseceived Timeout Error')
+            print ('Received Timeout Error')
             TIMEUP = True
             LOCK.release()
 
@@ -126,6 +129,8 @@ def gobackn(socket, max_seq, start_first, loss):
     global SOCKET
     global MAX_SEQ
     global TIMEUP
+    global TIMEOUT
+    global TIMER
     global LOSS
     global ACK_READY
 
@@ -133,7 +138,7 @@ def gobackn(socket, max_seq, start_first, loss):
     MAX_SEQ = max_seq
     ACK_READY = False
     SOCKET = socket
-    SOCKET.settimeout(4)
+    SOCKET.settimeout(20)
     buffer = []
 
     data_sent = True
@@ -141,16 +146,21 @@ def gobackn(socket, max_seq, start_first, loss):
     recv_thread.start()
 
     while True:
+        TIMEUP = current_milli_time()-TIMER == TIMEOUT
         if TIMEUP:
             print ('Time up!')
             # Received timeout, re-send data
             if data_sent:
                 LOCK.acquire()
                 print ('Time Up!')
-                next_frame_to_send = get_lowest_ack(next_frame_to_send-1, ack_expected)
+                if next_frame_to_send < MAX_SEQ:
+                    next_frame_to_send = 0
+                else:
+                    next_frame_to_send = get_lowest_ack(next_frame_to_send, ack_expected)
                 for i in range(nbuffered):
                     send_data(next_frame_to_send, frame_expected, buffer)
                     next_frame_to_send = next_frame_to_send + 1
+                TIMER = current_milli_time()
                 TIMEUP = False
                 LOCK.release()
             
