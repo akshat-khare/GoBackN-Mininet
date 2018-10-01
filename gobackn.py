@@ -73,14 +73,14 @@ next_frame_to_send = 0
 ack_expected = 0
 frame_expected = 0
 nbuffered = 0
-send_queue = []
+data_sent = True
 
 def recv_data():
     global next_frame_to_send
     global ack_expected
     global frame_expected
     global nbuffered
-    global send_queue
+    global data_sent
 
     global ACK_READY
     global TIMEUP
@@ -96,6 +96,7 @@ def recv_data():
                 
                 r = parse_message(msg)
                 print ('Received message from socket: {0}'.format(len(r['info'])))
+                data_sent = False
                 if r['seq'] is frame_expected:
                     print ('Received expected frame: {0}, with ack: {1}'.format(r['seq'], r['ack']))
                     to_network_layer(r['info'])
@@ -124,6 +125,7 @@ def gobackn(socket, max_seq, start_first, loss):
     global ack_expected
     global frame_expected
     global nbuffered
+    global data_sent
 
     global NETWORK_LAYER_READY
     global SOCKET
@@ -137,22 +139,26 @@ def gobackn(socket, max_seq, start_first, loss):
     LOSS = loss
     MAX_SEQ = max_seq
     ACK_READY = False
+    TIMER = current_milli_time()
     SOCKET = socket
     SOCKET.settimeout(20)
     buffer = []
 
-    data_sent = True
     recv_thread = threading.Thread(target=recv_data)
     recv_thread.start()
 
     while True:
-        TIMEUP = current_milli_time()-TIMER == TIMEOUT
+        curr_time = current_milli_time()
+        TIMEUP = curr_time-TIMER > TIMEOUT
+        
         if TIMEUP:
             print ('Time up!')
             # Received timeout, re-send data
             if data_sent:
                 LOCK.acquire()
-                print ('Time Up!')
+                print ('Time up! Timer Restarted.')
+                TIMER = current_milli_time()
+                TIMEUP = False
                 if next_frame_to_send < MAX_SEQ:
                     next_frame_to_send = 0
                 else:
@@ -160,8 +166,6 @@ def gobackn(socket, max_seq, start_first, loss):
                 for i in range(nbuffered):
                     send_data(next_frame_to_send, frame_expected, buffer)
                     next_frame_to_send = next_frame_to_send + 1
-                TIMER = current_milli_time()
-                TIMEUP = False
                 LOCK.release()
             
         send_frame = ACK_READY or start_first
