@@ -89,6 +89,7 @@ def recv_data():
     while True:
         print ('R1: {0}'.format(nbuffered))
         try:
+            SOCKET.settimeout(1)
             msg = SOCKET.recv(2048)
             p = random.random()
             if p > LOSS:
@@ -141,7 +142,6 @@ def gobackn(socket, max_seq, start_first, loss):
     ACK_READY = False
     TIMER = current_milli_time()
     SOCKET = socket
-    SOCKET.settimeout(20)
     buffer = []
 
     recv_thread = threading.Thread(target=recv_data)
