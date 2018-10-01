@@ -2,6 +2,7 @@ import threading
 import random
 import time
 import select
+import socket
 
 global SOCKET
 global ADDR
@@ -16,6 +17,10 @@ current_milli_time = lambda: int(round(time.time() * 1000))
 def add_zeroes(string, size):
     zeroes = '0' * (size-len(string))
     return zeroes + string
+
+def add_zeroes_back(string, size):
+    zeroes = '0' * (size-len(string))
+    return string + zeroes
 
 def get_lowest_ack(next_frame, ack):
     while next_frame%7 != ack:
@@ -38,7 +43,8 @@ def parse_message(msg):
     r = {}
     r['seq'] = int(msg[0:32], 2) % MAX_SEQ
     r['ack'] = int(msg[32:64], 2)
-    r['info'] = msg[256:-32]
+    length = int(msg[64:96], 2)
+    r['info'] = msg[256:(256+length)]
     return r
 
 def between(a, b, c):
@@ -53,15 +59,18 @@ def send_data(frame_nr, frame_expected, buffer):
     global LOSS
     sinfo = buffer[frame_nr]
     sseq = "{0:b}".format(frame_nr)
-    # Ack of the received frame
     ack = (frame_expected + MAX_SEQ - 1) % MAX_SEQ
     sack = "{0:b}".format(ack)
+    length = len(sinfo)
+    slength = "{0:b}".format(length)
     # Construct the string to be sent. Done.
     # Todo -> Add checksum error bits
-    msg = add_zeroes(sseq, 32) + add_zeroes(sack, 32) + add_zeroes('', 196) + sinfo
+    msg = add_zeroes(sseq, 32) + add_zeroes(sack, 32) + add_zeroes(slength, 32) + add_zeroes('', 160) + sinfo
+    msg = add_zeroes_back(msg, 2048)
     SOCKET.sendall(msg.encode('utf-8'))
     print ('--------------------------------')
-    print ('Sent the message with: frame:{0}\tack:{1}\n'.format(frame_nr, ack))
+    # print ('Sent the message with: frame:{0}\tack:{1}\n'.format(frame_nr, ack))
+    print ('Sent message length: {0}'.format(len(sinfo)))
 
 def gobackn(socket, start_first, loss):
     global MAX_SEQ
@@ -85,17 +94,21 @@ def gobackn(socket, start_first, loss):
     data_sent = True
     while True:
         frame_arrival = False
-        ready_to_read, ready_to_write, error = select.select([SOCKET], [SOCKET], [])
+        ready_to_read, ready_to_write, error = select.select([SOCKET], [SOCKET], [SOCKET], 2)
+        # print (ready_to_read, ready_to_write, error)
         if ready_to_read:
             print ('Socket is about to read. Waiting for data on socket.')
             # Receive message with some probability
             p = random.random()
-            msg = SOCKET.recv(2048)
-            if p > LOSS:
-                frame_arrival = True
-            else:
-                data_sent = False
-                print ('PACKET NOT RECEIVED')
+            try:
+                msg = SOCKET.recv(2048)
+                if p > LOSS:
+                    frame_arrival = True
+                else:
+                    data_sent = False
+                    print ('PACKET NOT RECEIVED')
+            except Exception:
+                print ('Received timeout error.')
 
         if error:
             print ('Possible errors in socket')
@@ -109,7 +122,7 @@ def gobackn(socket, start_first, loss):
 
         if frame_arrival:
             r = parse_message(msg)
-            print ('Received frame: {0} and ack: {1}'.format(r['seq'], r['ack']))
+            print ('Received frame: {0} and ack: {1}, length: {2}'.format(r['seq'], r['ack'], len(r['info'])))
             if r['seq'] is frame_expected:
                 print ('Received expected frame, with ack: {0}'.format(r['ack']))
                 to_network_layer(r['info'])
@@ -121,7 +134,7 @@ def gobackn(socket, start_first, loss):
             
         send_frame = sender or frame_arrival
         if NETWORK_LAYER_READY and send_frame:
-            print ('Sending next frame')
+            print ('Sending frame: {0}'.format(next_frame_to_send))
             buffer.append(from_network_layer())
             nbuffered = nbuffered + 1
             send_data(next_frame_to_send, frame_expected, buffer)
