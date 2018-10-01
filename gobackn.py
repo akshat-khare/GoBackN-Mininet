@@ -14,6 +14,10 @@ def add_zeroes(string, size):
     zeroes = '0' * (size-len(string))
     return zeroes + string
 
+def add_zeroes_back(string, size):
+    zeroes = '0' * (size-len(string))
+    return string + zeroes
+
 def get_lowest_ack(next_frame, ack):
     while next_frame%7 != ack:
         next_frame -= 1
@@ -35,7 +39,8 @@ def parse_message(msg):
     r = {}
     r['seq'] = int(msg[0:32], 2) % MAX_SEQ
     r['ack'] = int(msg[32:64], 2)
-    r['info'] = msg[256:-32]
+    length = int(msg[64:96], 2)
+    r['info'] = msg[256:(256+length)]
     return r
 
 def between(a, b, c):
@@ -49,16 +54,18 @@ def between(a, b, c):
 def send_data(frame_nr, frame_expected, buffer):
     sinfo = buffer[frame_nr]
     sseq = "{0:b}".format(frame_nr)
-    # Ack of the received frame
     ack = (frame_expected + MAX_SEQ - 1) % MAX_SEQ
     sack = "{0:b}".format(ack)
+    length = len(sinfo)
+    slength = "{0:b}".format(length)
     # Construct the string to be sent. Done.
     # Todo -> Add checksum error bits
-    msg = add_zeroes(sseq, 32) + add_zeroes(sack, 32) + add_zeroes('', 196) + sinfo
+    msg = add_zeroes(sseq, 32) + add_zeroes(sack, 32) + add_zeroes(slength, 32) + add_zeroes('', 160) + sinfo
+    msg = add_zeroes_back(msg, 2048)
     SOCKET.sendall(msg.encode('utf-8'))
     print ('--------------------------------')
-    # print ('Sent the message with: frame:{0}\tack:{1},{2}\n'.format(frame_nr, ack, msg[32:64]))
-    print ('Sent message: {0}'.format(msg))
+    # print ('Sent the message with: frame:{0}\tack:{1}\n'.format(frame_nr, ack))
+    print ('Sent message frame: {0} and ack: {1}, length: {2}'.format(frame_nr, ack, len(sinfo)))
 
 next_frame_to_send = 0
 ack_expected = 0
@@ -114,7 +121,8 @@ def gobackn(socket, max_seq, start_first, loss):
     MAX_SEQ = max_seq
     ACK_READY = False
     SOCKET = socket
-    SOCKET.settimeout(TIMEOUT)
+    SOCKET.settimeout(2)
+    SOCKET.setblocking(0)
     buffer = []
 
     data_sent = True
@@ -132,9 +140,10 @@ def gobackn(socket, max_seq, start_first, loss):
                     send_data(next_frame_to_send, frame_expected, buffer)
                     next_frame_to_send = next_frame_to_send + 1
                 LOCK.release()
-             
-        send_frame = start_first or ACK_READY
-        if NETWORK_LAYER_READY and send_frame:
+            
+        # print (NETWORK_LAYER_READY)
+        if NETWORK_LAYER_READY or start_first:
+            print ('Sending frame: {0}'.format(next_frame_to_send))
             buffer.append(from_network_layer())
             LOCK.acquire()
             print ('Sending message.')
@@ -149,3 +158,6 @@ def gobackn(socket, max_seq, start_first, loss):
             NETWORK_LAYER_READY = True
         else:
             NETWORK_LAYER_READY = False
+
+        if start_first:
+            start_first = False
