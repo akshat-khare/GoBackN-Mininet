@@ -14,7 +14,7 @@ def main():
         print('Received', repr(data))
         
         print('Starting go back n')
-        gobackn.gobackn(s, 1, False, LOSS)
+        gobackn.gobackn(s, 7, False, LOSS)
         print('Go back n completed')
     
 
