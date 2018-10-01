@@ -1,6 +1,7 @@
 import threading
 import random
 import time
+import select
 
 global SOCKET
 global ADDR
@@ -67,42 +68,48 @@ def gobackn(socket, start_first, loss):
     global SOCKET
     global LOSS
     global NETWORK_LAYER_READY
+    global TIMEOUT
 
     LOSS = loss
     SOCKET = socket
-    SOCKET.settimeout(TIMEOUT)
+    SOCKET.settimeout(2)
+    SOCKET.setblocking(0)
     buffer = []
 
     next_frame_to_send = 0
     ack_expected = 0
     frame_expected = 0
     nbuffered = 0
+    sender = start_first
 
     data_sent = True
     while True:
         frame_arrival = False
-        if not start_first:
-            print ('Waiting for data on socket.')
+        ready_to_read, ready_to_write, error = select.select([SOCKET], [SOCKET], [])
+        if ready_to_read:
+            print ('Socket is about to read. Waiting for data on socket.')
             # Receive message with some probability
             p = random.random()
-            try:
-                msg = SOCKET.recv(2048)
-                if p > LOSS:
-                    frame_arrival = True
-                else:
-                    data_sent = False
-                    print ('PACKET NOT RECEIVED')
-            except Exception as e:
-                # Received timeout, re-send data
-                if data_sent:
-                    print ('Time Up!')
-                    next_frame_to_send = get_lowest_ack(next_frame_to_send-1, ack_expected)
-                    for i in range(nbuffered):
-                        send_data(next_frame_to_send, frame_expected, buffer)
-                        next_frame_to_send = next_frame_to_send + 1
+            msg = SOCKET.recv(2048)
+            if p > LOSS:
+                frame_arrival = True
+            else:
+                data_sent = False
+                print ('PACKET NOT RECEIVED')
+
+        if error:
+            print ('Possible errors in socket')
+            # Received timeout, re-send data
+            if data_sent:
+                print ('Time Up!')
+                next_frame_to_send = get_lowest_ack(next_frame_to_send-1, ack_expected)
+                for i in range(nbuffered):
+                    send_data(next_frame_to_send, frame_expected, buffer)
+                    next_frame_to_send = next_frame_to_send + 1
 
         if frame_arrival:
             r = parse_message(msg)
+            print ('Received frame: {0} and ack: {1}'.format(r['seq'], r['ack']))
             if r['seq'] is frame_expected:
                 print ('Received expected frame, with ack: {0}'.format(r['ack']))
                 to_network_layer(r['info'])
@@ -112,8 +119,9 @@ def gobackn(socket, start_first, loss):
                 nbuffered = nbuffered - 1
                 ack_expected = (ack_expected + 1) % MAX_SEQ
             
-        send_frame = start_first or frame_arrival
+        send_frame = sender or frame_arrival
         if NETWORK_LAYER_READY and send_frame:
+            print ('Sending next frame')
             buffer.append(from_network_layer())
             nbuffered = nbuffered + 1
             send_data(next_frame_to_send, frame_expected, buffer)
