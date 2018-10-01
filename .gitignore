@@ -34,3 +34,4 @@
 # VSCode
 .vscode/*
 *.pyc
+*.log
