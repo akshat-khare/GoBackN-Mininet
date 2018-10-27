@@ -111,15 +111,15 @@ def recv_data():
                 print ('R: Received message from socket: at time: {0}'.format(TIMER))
                 recieved_details(r)
                 if r['seq'] is frame_expected:
-                    print ('R: Received expected frame')
+                    ack_stack.append(frame_expected)
+                    # print ('R: Received expected frame')
                     TIMER = current_milli_time()
                     print ('R: Timer Restarted {0}'.format(TIMER))
                     to_network_layer(r['info'])
                     frame_expected = (frame_expected + 1) % MAX_SEQ
-                    ack_stack.append(frame_expected)
 
                 if between(ack_expected, r['ack'], next_frame_to_send):
-                    print ('R: Received expected ack')
+                    # print ('R: Received expected ack')
                     nbuffered = nbuffered - 1
                     ack_expected = (ack_expected + 1) % MAX_SEQ
                 
