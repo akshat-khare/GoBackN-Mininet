@@ -4,7 +4,7 @@ import time
 import socket
 
 LOCK = threading.Lock()
-TIMEOUT = 2000
+TIMEOUT = 5000
 TIMEUP = False
 ACK_READY = False
 NETWORK_LAYER_READY = True
@@ -21,6 +21,7 @@ def add_zeroes_back(string, size):
     return string + zeroes
 
 def get_lowest_ack(next_frame, ack):
+    print ()
     while next_frame%7 != ack:
         next_frame -= 1
     return next_frame
@@ -34,7 +35,7 @@ def from_network_layer():
 
 def to_network_layer(msg):
     # Todo -> Write this message onto a file
-    print ('Received message.')
+    print ('R: Received message.')
 
 def parse_message(msg):
     # Parse the message and return a dictionary of seq_num, info and ack. Done.
@@ -67,7 +68,7 @@ def send_data(frame_nr, frame_expected, buffer):
     SOCKET.sendall(msg.encode('utf-8'))
     print ('--------------------------------')
     # print ('Sent the message with: frame:{0}\tack:{1}\n'.format(frame_nr, ack))
-    print ('Sent message frame: {0} and ack: {1}, length: {2}'.format(frame_nr, ack, len(sinfo)))
+    print ('S: Sent message frame: {0} and ack: {1}, length: {2}'.format(frame_nr, ack, len(sinfo)))
 
 next_frame_to_send = 0
 ack_expected = 0
@@ -87,37 +88,34 @@ def recv_data():
     global TIMER
 
     while True:
-        print ('R1: {0}'.format(nbuffered))
         try:
-            SOCKET.settimeout(1)
+            SOCKET.settimeout(10)
             msg = SOCKET.recv(2048)
             p = random.random()
             if p > LOSS:
                 LOCK.acquire()
                 
                 r = parse_message(msg)
-                print ('Received message from socket: {0}'.format(len(r['info'])))
+                print ('R: Received message from socket: {0}, when expected frame: {1} and expected ack: {2}'.format(len(r['info']), frame_expected, ack_expected))
                 data_sent = False
                 if r['seq'] is frame_expected:
-                    print ('Received expected frame: {0}, with ack: {1}'.format(r['seq'], r['ack']))
+                    print ('R: Received expected frame: {0}'.format(r['seq']))
+                    TIMER = current_milli_time()
                     to_network_layer(r['info'])
                     frame_expected = (frame_expected + 1) % MAX_SEQ
                     ACK_READY = True
-                    print ('Ack ready set to true')
 
-                print ('R: {0}\t{1}\t{2}'.format(ack_expected, r['ack'], next_frame_to_send))
                 if between(ack_expected, r['ack'], next_frame_to_send):
-                    print ('Received expected ack')
+                    print ('R: Received expected ack')
                     nbuffered = nbuffered - 1
                     ack_expected = (ack_expected + 1) % MAX_SEQ
                 
-                print ('R2: {0}'.format(nbuffered))
                 LOCK.release()
             else:
-                print ('FRAME DROPPED')
+                print ('R: FRAME DROPPED')
         except socket.timeout:
             LOCK.acquire()
-            print ('Received Timeout Error')
+            print ('R: Received Timeout Error')
             TIMEUP = True
             LOCK.release()
 
@@ -143,6 +141,7 @@ def gobackn(socket, max_seq, start_first, loss):
     TIMER = current_milli_time()
     SOCKET = socket
     buffer = []
+    sender = start_first
 
     recv_thread = threading.Thread(target=recv_data)
     recv_thread.start()
@@ -150,31 +149,32 @@ def gobackn(socket, max_seq, start_first, loss):
     while True:
         curr_time = current_milli_time()
         TIMEUP = curr_time-TIMER > TIMEOUT
-        
-        if TIMEUP:
-            print ('Time up!')
-            # Received timeout, re-send data
-            if data_sent:
-                LOCK.acquire()
-                print ('Time up! Timer Restarted.')
-                TIMER = current_milli_time()
-                TIMEUP = False
-                if next_frame_to_send < MAX_SEQ:
-                    next_frame_to_send = 0
-                else:
-                    next_frame_to_send = get_lowest_ack(next_frame_to_send, ack_expected)
-                for i in range(nbuffered):
-                    send_data(next_frame_to_send, frame_expected, buffer)
-                    next_frame_to_send = next_frame_to_send + 1
-                LOCK.release()
-            
         send_frame = ACK_READY or start_first
+        
+        if TIMEUP and sender:
+            # Received timeout, re-send data
+            LOCK.acquire()
+            print ('S: Time up when next frame to be sent is {0}'.format(next_frame_to_send))
+            TIMER = current_milli_time()
+            print ('S: Time up! Timer Restarted.')
+            TIMEUP = False
+            if next_frame_to_send < MAX_SEQ:
+                next_frame_to_send = 0
+            else:
+                next_frame_to_send = get_lowest_ack(next_frame_to_send-MAX_SEQ, ack_expected)
+            
+            print ('S: Re-sending from {0}'.format(next_frame_to_send))
+            for i in range(nbuffered):
+                send_data(next_frame_to_send, frame_expected, buffer)
+                next_frame_to_send = next_frame_to_send + 1
+            LOCK.release()
+            
         # print ('S: {0}\t{1}'.format(NETWORK_LAYER_READY, send_frame))
         if NETWORK_LAYER_READY and send_frame:
-            print ('Sending frame: {0}'.format(next_frame_to_send))
+            print ('S: Sending frame: {0}'.format(next_frame_to_send))
             buffer.append(from_network_layer())
             LOCK.acquire()
-            print ('Sending message.')
+            print ('S: Sending message.')
             nbuffered = nbuffered + 1
             data_sent = True
             ACK_READY = False
@@ -186,6 +186,3 @@ def gobackn(socket, max_seq, start_first, loss):
             NETWORK_LAYER_READY = True
         else:
             NETWORK_LAYER_READY = False
-
-        if start_first:
-            start_first = False
