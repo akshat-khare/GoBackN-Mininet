@@ -22,7 +22,7 @@ def add_zeroes_back(string, size):
 
 def get_lowest_ack(next_frame, ack):
     print ()
-    while next_frame%7 != ack:
+    while next_frame%MAX_SEQ != ack:
         next_frame -= 1
     return next_frame
 
